@@ -7,7 +7,7 @@ set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 # Define path of darknet folder here.
 find_path(DARKNET_PATH
   NAMES "README.md"
-  HINTS "${CMAKE_CURRENT_SOURCE_DIR}/../darknet/")
+  PATHS "${CMAKE_CURRENT_SOURCE_DIR}/../darknet/")
 message("Darknet path dir = ${DARKNET_PATH}")
 add_definitions(-DDARKNET_FILE_PATH="${DARKNET_PATH}")
 
@@ -239,18 +239,18 @@ install(
 set(PATH "${CMAKE_CURRENT_SOURCE_DIR}/yolo_network_config/weights")
 set(FILE "${PATH}/yolov2-tiny.weights")
 message(STATUS "Checking and downloading yolov2-tiny.weights if needed ...")
-if (NOT EXISTS "${FILE}")
-  message(STATUS "... file does not exist. Downloading now ...")
-  execute_process(COMMAND wget http://pjreddie.com/media/files/yolov2-tiny.weights -P ${PATH})
-endif()
+# if (NOT EXISTS "${FILE}")
+#   message(STATUS "... file does not exist. Downloading now ...")
+#   execute_process(COMMAND wget http://pjreddie.com/media/files/yolov2-tiny.weights -P ${PATH})
+# endif()
 
 # Download yolov3.weights
 set(FILE "${PATH}/yolov3.weights")
 message(STATUS "Checking and downloading yolov3.weights if needed ...")
-if (NOT EXISTS "${FILE}")
-  message(STATUS "... file does not exist. Downloading now ...")
-  execute_process(COMMAND wget http://pjreddie.com/media/files/yolov3.weights -P ${PATH})
-endif()
+# if (NOT EXISTS "${FILE}")
+#   message(STATUS "... file does not exist. Downloading now ...")
+#   execute_process(COMMAND wget http://pjreddie.com/media/files/yolov3.weights -P ${PATH})
+# endif()
 
 #############
 ## Testing ##
@@ -258,13 +258,13 @@ endif()
 
 if(CATKIN_ENABLE_TESTING)
   # Download yolov2.weights
-  set(PATH "${CMAKE_CURRENT_SOURCE_DIR}/yolo_network_config/weights")
-  set(FILE "${PATH}/yolov2.weights")
-  message(STATUS "Checking and downloading yolov2.weights if needed ...")
-  if (NOT EXISTS "${FILE}")
-    message(STATUS "... file does not exist. Downloading now ...")
-    execute_process(COMMAND wget http://pjreddie.com/media/files/yolov2.weights -P ${PATH})
-  endif()
+  # set(PATH "${CMAKE_CURRENT_SOURCE_DIR}/yolo_network_config/weights")
+  # set(FILE "${PATH}/yolov2.weights")
+  # message(STATUS "Checking and downloading yolov2.weights if needed ...")
+  # if (NOT EXISTS "${FILE}")
+  #   message(STATUS "... file does not exist. Downloading now ...")
+  #   execute_process(COMMAND wget http://pjreddie.com/media/files/yolov2.weights -P ${PATH})
+  # endif()
 
   find_package(rostest REQUIRED)
 

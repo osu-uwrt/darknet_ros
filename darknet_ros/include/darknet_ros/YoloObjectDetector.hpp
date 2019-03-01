@@ -195,7 +195,7 @@ class YoloObjectDetector
   double demoTime_;
 
   RosBox_ *roiBoxes_;
-  bool viewImage_;
+  bool displayDetectedImage_;
   bool enableConsoleOutput_;
   int waitKeyDelay_;
   int fullScreen_;
