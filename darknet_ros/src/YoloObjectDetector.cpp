@@ -18,6 +18,12 @@ std::string darknetFilePath_ = DARKNET_FILE_PATH;
 #error Path of darknet repository is not defined in CMakeLists.txt.
 #endif
 
+static float get_pixel(image m, int x, int y, int c)
+{
+    assert(x < m.w && y < m.h && c < m.c);
+    return m.data[c*m.h*m.w + y*m.w + x];
+}
+
 namespace darknet_ros {
 
 char *cfg;
@@ -55,9 +61,9 @@ YoloObjectDetector::~YoloObjectDetector()
 bool YoloObjectDetector::readParameters()
 {
   // Load common parameters.
-  nodeHandle_.param("image_view/enable_opencv", viewImage_, true);
+  nodeHandle_.param("image_view/display_detected_image", displayDetectedImage_, true);
   nodeHandle_.param("image_view/wait_key_delay", waitKeyDelay_, 3);
-  nodeHandle_.param("image_view/enable_console_output", enableConsoleOutput_, false);
+  nodeHandle_.param("image_view/enable_console_output", enableConsoleOutput_, true);
 
   // Check if Xserver is running on Linux.
   if (XOpenDisplay(NULL)) {
@@ -65,7 +71,7 @@ bool YoloObjectDetector::readParameters()
     ROS_INFO("[YoloObjectDetector] Xserver is running.");
   } else {
     ROS_INFO("[YoloObjectDetector] Xserver is not running.");
-    viewImage_ = false;
+    displayDetectedImage_ = false;
   }
 
   // Set vector sizes.
@@ -95,14 +101,14 @@ void YoloObjectDetector::init()
 
   // Path to weights file.
   nodeHandle_.param("yolo_model/weight_file/name", weightsModel,
-                    std::string("yolov2-tiny.weights"));
+                    std::string("yolov3-tiny_RoboSub18.weights"));
   nodeHandle_.param("weights_path", weightsPath, std::string("/default"));
   weightsPath += "/" + weightsModel;
   weights = new char[weightsPath.length() + 1];
   strcpy(weights, weightsPath.c_str());
 
   // Path to config file.
-  nodeHandle_.param("yolo_model/config_file/name", configModel, std::string("yolov2-tiny.cfg"));
+  nodeHandle_.param("yolo_model/config_file/name", configModel, std::string("yolov3-tiny_RoboSub18.cfg"));
   nodeHandle_.param("config_path", configPath, std::string("/default"));
   configPath += "/" + configModel;
   cfg = new char[configPath.length() + 1];
@@ -187,6 +193,7 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg)
 
   try {
     cam_image = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+    imageHeader_ = msg->header;
   } catch (cv_bridge::Exception& e) {
     ROS_ERROR("cv_bridge exception: %s", e.what());
     return;
@@ -195,7 +202,6 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg)
   if (cam_image) {
     {
       boost::unique_lock<boost::shared_mutex> lockImageCallback(mutexImageCallback_);
-      imageHeader_ = msg->header;
       camImageCopy_ = cam_image->image.clone();
     }
     {
@@ -258,14 +264,14 @@ bool YoloObjectDetector::isCheckingForObjects() const
 
 bool YoloObjectDetector::publishDetectionImage(const cv::Mat& detectionImage)
 {
-  if (detectionImagePublisher_.getNumSubscribers() < 1)
-    return false;
+  //if (detectionImagePublisher_.getNumSubscribers() < 1)
+  //  return false;
   cv_bridge::CvImage cvImage;
   cvImage.header.stamp = ros::Time::now();
   cvImage.header.frame_id = "detection_image";
   cvImage.encoding = sensor_msgs::image_encodings::BGR8;
   cvImage.image = detectionImage;
-  detectionImagePublisher_.publish(*cvImage.toImageMsg());
+  detectionImagePublisher_.publish(cvImage.toImageMsg());
   ROS_DEBUG("Detection image has been published.");
   return true;
 }
@@ -409,7 +415,6 @@ void *YoloObjectDetector::fetchInThread()
   IplImageWithHeader_ imageAndHeader = getIplImageWithHeader();
   IplImage* ROS_img = imageAndHeader.image;
   ipl_into_image(ROS_img, buff_[buffIndex_]);
-  headerBuff_[buffIndex_] = imageAndHeader.header;
   {
     boost::shared_lock<boost::shared_mutex> lock(mutexImageCallback_);
     buffId_[buffIndex_] = actionId_;
@@ -421,7 +426,47 @@ void *YoloObjectDetector::fetchInThread()
 
 void *YoloObjectDetector::displayInThread(void *ptr)
 {
-  show_image_cv(buff_[(buffIndex_ + 1)%3], "YOLO V3", ipl_);
+  // This function will now ALWAYS publish the detected image, but will only display in
+  // an OpenCV window if displayDetectedImage_ is true
+  //show_image_cv(buff_[(buffIndex_ + 1)%3], "YOLO V3", ipl_);
+  
+  image p = buff_[(buffIndex_ + 1)%3];
+  std::string name = "YOLO V3";
+  IplImage *disp = ipl_;
+  int x,y,k;
+  if(p.c == 3) rgbgr_image(p);
+  //normalize_image(copy);
+
+  char buff[256];
+  //sprintf(buff, "%s (%d)", name, windows);
+  sprintf(buff, "%s", name.c_str());
+
+  int step = disp->widthStep;
+
+  for(y = 0; y < p.h; ++y){
+      for(x = 0; x < p.w; ++x){
+          for(k= 0; k < p.c; ++k){
+              disp->imageData[y*step + x*p.c + k] = (unsigned char)(get_pixel(p,x,y,k)*255);
+          }
+      }
+  }
+  if(0){
+      int w = 448;
+      int h = w*p.h/p.w;
+      if(h > 1000){
+          h = 1000;
+          w = h*p.w/p.h;
+      }
+      IplImage *buffer = disp;
+      disp = cvCreateImage(cvSize(w, h), buffer->depth, buffer->nChannels);
+      cvResize(buffer, disp, CV_INTER_LINEAR);
+      cvReleaseImage(&buffer);
+  }
+  if(displayDetectedImage_) {
+    cvNamedWindow(buff, CV_WINDOW_NORMAL);
+    cvShowImage(buff, disp);
+  }
+  
   int c = cvWaitKey(waitKeyDelay_);
   if (c != -1) c = c%256;
   if (c == 27) {
@@ -507,17 +552,14 @@ void YoloObjectDetector::yolo()
   buff_[0] = ipl_to_image(ROS_img);
   buff_[1] = copy_image(buff_[0]);
   buff_[2] = copy_image(buff_[0]);
-  headerBuff_[0] = imageAndHeader.header;
-  headerBuff_[1] = headerBuff_[0];
-  headerBuff_[2] = headerBuff_[0];
   buffLetter_[0] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[1] = letterbox_image(buff_[0], net_->w, net_->h);
   buffLetter_[2] = letterbox_image(buff_[0], net_->w, net_->h);
-  ipl_ = cvCreateImage(cvSize(buff_[0].w, buff_[0].h), IPL_DEPTH_8U, buff_[0].c);
+  ipl_ = cvCreateImage(cvSize(buff_[0].w, buff_[0].h), IPL_DEPTH_8U, buff_[0].c); // Initializes image
 
   int count = 0;
 
-  if (!demoPrefix_ && viewImage_) {
+  if (!demoPrefix_ && displayDetectedImage_) {
     cvNamedWindow("YOLO V3", CV_WINDOW_NORMAL);
     if (fullScreen_) {
       cvSetWindowProperty("YOLO V3", CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
@@ -536,9 +578,7 @@ void YoloObjectDetector::yolo()
     if (!demoPrefix_) {
       fps_ = 1./(what_time_is_it_now() - demoTime_);
       demoTime_ = what_time_is_it_now();
-      if (viewImage_) {
-        displayInThread(0);
-      }
+      displayInThread(0); // ALWAYS run this function (previously inside if-loop)
       publishInThread();
     } else {
       char name[256];
@@ -621,7 +661,7 @@ void *YoloObjectDetector::publishInThread()
     }
     boundingBoxesResults_.header.stamp = ros::Time::now();
     boundingBoxesResults_.header.frame_id = "detection";
-    boundingBoxesResults_.image_header = headerBuff_[(buffIndex_ + 1) % 3];
+    boundingBoxesResults_.image_header = imageHeader_;
     boundingBoxesPublisher_.publish(boundingBoxesResults_);
   } else {
     std_msgs::Int8 msg;
