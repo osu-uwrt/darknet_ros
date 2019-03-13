@@ -7,6 +7,7 @@
  */
 
 // yolo object detector
+
 #include "darknet_ros/YoloObjectDetector.hpp"
 
 // Check for xServer
