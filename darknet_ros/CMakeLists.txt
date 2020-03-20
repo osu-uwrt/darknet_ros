@@ -203,8 +203,8 @@ install(
   FILES_MATCHING PATTERN "*.h"
 )
 
-install(DIRECTORY launch/
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+install(DIRECTORY config launch yolo_network_config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
 # Download yolov2-tiny.weights
