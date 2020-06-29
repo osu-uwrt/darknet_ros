@@ -13,7 +13,7 @@ message(STATUS "Darknet path dir = ${DARKNET_PATH}")
 add_definitions(-DDARKNET_FILE_PATH="${DARKNET_PATH}")
 
 # Find CUDA
-find_package(CUDA QUIET)
+find_package(CUDA)
 if (CUDA_FOUND)
   find_package(CUDA REQUIRED)
   message(STATUS "CUDA Version: ${CUDA_VERSION_STRINGS}")
